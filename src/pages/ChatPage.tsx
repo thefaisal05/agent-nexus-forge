@@ -170,7 +170,16 @@ const ChatPage = () => {
             sender_type: newMessage.sender_type as "user" | "agent",
             created_at: newMessage.created_at
           };
-          setMessages(prevMessages => [...prevMessages, typedMessage]);
+          
+          // Only add the message if it's not already in our messages array
+          setMessages(prevMessages => {
+            // Check if the message already exists
+            const messageExists = prevMessages.some(msg => msg.id === typedMessage.id);
+            if (messageExists) {
+              return prevMessages;
+            }
+            return [...prevMessages, typedMessage];
+          });
         }
       )
       .subscribe();
@@ -188,7 +197,18 @@ const ChatPage = () => {
     setIsProcessing(true);
 
     try {
-      // Insert user message
+      // Optimistically add user message to UI immediately
+      const optimisticUserMessage: Message = {
+        id: `temp-${Date.now()}`,
+        conversation_id: conversation.id,
+        sender_type: "user",
+        content: userMessageContent,
+        created_at: new Date().toISOString()
+      } as Message;
+      
+      setMessages(prevMessages => [...prevMessages, optimisticUserMessage]);
+
+      // Insert user message to database
       const { data: userMessage, error: userMessageError } = await supabase
         .from("messages")
         .insert({
@@ -200,6 +220,29 @@ const ChatPage = () => {
         .single();
 
       if (userMessageError) throw userMessageError;
+
+      // Replace optimistic message with real one
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === optimisticUserMessage.id ? 
+            {
+              id: userMessage.id,
+              content: userMessage.content,
+              sender_type: userMessage.sender_type,
+              created_at: userMessage.created_at
+            } : msg
+        )
+      );
+
+      // Show typing indicator for agent
+      const typingMessage: Message = {
+        id: `typing-${Date.now()}`,
+        sender_type: "agent",
+        content: "...",
+        created_at: new Date().toISOString()
+      } as Message;
+      
+      setMessages(prevMessages => [...prevMessages, typingMessage]);
 
       // Generate agent response
       const promptBlock = blocks.find(block => block.type === "prompt");
@@ -224,7 +267,7 @@ const ChatPage = () => {
       
       if (googleAIBlock) {
         try {
-          // You'll need to get the API key securely from your backend/secrets
+          // Get the API key securely
           const apiKey = await getAPIKey();
           
           const fullPrompt = `${systemPrompt}\n\nConversation history:\n${recentMessages}\n\nUser: ${userMessageContent}\n\nAssistant:`;
@@ -235,7 +278,10 @@ const ChatPage = () => {
         }
       }
 
-      // Insert agent response
+      // Remove typing indicator and add real agent response
+      setMessages(prevMessages => prevMessages.filter(msg => msg.id !== typingMessage.id));
+
+      // Insert agent response to database
       await supabase
         .from("messages")
         .insert({
@@ -257,7 +303,7 @@ const ChatPage = () => {
     try {
       const { data: secretData, error } = await supabase
         .functions.invoke('get-api-key', {
-          body: { key: 'GOOGLE_AI_API_KEY' }
+          body: { key: 'API_KEY' }
         });
       
       if (error) throw new Error('Failed to retrieve API key');
@@ -301,7 +347,9 @@ const ChatPage = () => {
                   className={`max-w-[80%] rounded-lg p-3 ${
                     message.sender_type === "user"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-secondary"
+                      : message.content === "..." 
+                        ? "bg-secondary animate-pulse" 
+                        : "bg-secondary"
                   }`}
                 >
                   {message.content}
