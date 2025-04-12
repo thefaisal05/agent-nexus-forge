@@ -24,9 +24,16 @@ export async function generateText(prompt: string, apiKey: string) {
     // Always initialize with the provided API key to ensure fresh instance
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    
+    console.log("Generating text with prompt:", prompt.substring(0, 50) + "...");
+    
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    const text = response.text();
+    
+    console.log("Generated text response:", text.substring(0, 50) + "...");
+    
+    return text;
   } catch (error) {
     console.error("Error generating text with Google AI:", error);
     throw error;

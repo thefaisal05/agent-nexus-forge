@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Send } from "lucide-react";
-import { generateText } from "@/lib/googleai";
 
 type Agent = {
   id: string;
@@ -234,8 +233,9 @@ const ChatPage = () => {
       );
 
       // Show typing indicator for agent
+      const typingIndicatorId = `typing-${Date.now()}`;
       const typingMessage: Message = {
-        id: `typing-${Date.now()}`,
+        id: typingIndicatorId,
         sender_type: "agent",
         content: "...",
         created_at: new Date().toISOString()
@@ -266,14 +266,7 @@ const ChatPage = () => {
       
       if (googleAIBlock) {
         try {
-          // Get the API key securely
-          const apiKey = await getAPIKey();
-          
-          if (!apiKey) {
-            throw new Error("API key not found");
-          }
-          
-          console.log("Calling generate-response with prompt");
+          console.log("Preparing to call generate-response function");
           
           // Use the Supabase function to generate a response
           const { data, error } = await supabase.functions.invoke("generate-response", {
@@ -283,25 +276,34 @@ const ChatPage = () => {
             }
           });
           
-          if (error) throw error;
+          console.log("Response from generate-response:", data);
+          
+          if (error) {
+            console.error("Error from generate-response function:", error);
+            throw new Error(`API error: ${error.message || "Unknown error"}`);
+          }
           
           if (data && data.text) {
             response = data.text;
+            console.log("Generated response:", response.substring(0, 50) + "...");
+          } else if (data && data.error) {
+            throw new Error(`API error: ${data.error}`);
           } else {
             throw new Error("No response from AI service");
           }
           
         } catch (error: any) {
           console.error("Error generating AI response:", error);
-          response = "I encountered an error while processing your request. Please try again later.";
+          response = `I encountered an error while processing your request: ${error.message}. Please try again later.`;
+          toast.error("Failed to generate AI response");
         }
       }
 
-      // Remove typing indicator and add real agent response
-      setMessages(prevMessages => prevMessages.filter(msg => msg.id !== typingMessage.id));
+      // Remove typing indicator
+      setMessages(prevMessages => prevMessages.filter(msg => msg.id !== typingIndicatorId));
 
       // Insert agent response to database
-      await supabase
+      const { error: agentResponseError } = await supabase
         .from("messages")
         .insert({
           conversation_id: conversation.id,
@@ -309,26 +311,16 @@ const ChatPage = () => {
           content: response
         });
         
+      if (agentResponseError) {
+        console.error("Error inserting agent response:", agentResponseError);
+        toast.error("Failed to save agent response");
+      }
+        
     } catch (error: any) {
       toast.error(error.message || "Failed to send message");
+      console.error("Error in sendMessage:", error);
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  // Helper function to get API key
-  const getAPIKey = async (): Promise<string> => {
-    try {
-      const { data: secretData, error } = await supabase
-        .functions.invoke('get-api-key', {
-          body: { key: 'API_KEY' }
-        });
-      
-      if (error) throw new Error('Failed to retrieve API key');
-      return secretData?.apiKey || "";
-    } catch (e) {
-      console.error("Error getting API key:", e);
-      return "";
     }
   };
 

@@ -18,6 +18,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get("API_KEY");
     
     if (!apiKey) {
+      console.error("API_KEY environment variable is not set");
       throw new Error("API_KEY environment variable is not set");
     }
 
@@ -26,21 +27,25 @@ serve(async (req) => {
     const { prompt, model = "gemini-pro" } = await req.json();
     
     if (!prompt) {
+      console.error("Prompt is missing in request");
       throw new Error("Prompt is required");
     }
 
     console.log(`Using model: ${model}`);
+    console.log(`Processing prompt: ${prompt.substring(0, 50)}...`);
 
     // Initialize Google AI
     const genAI = new GoogleGenerativeAI(apiKey);
     const genModel = genAI.getGenerativeModel({ model });
     
     // Generate content
+    console.log("Generating content...");
     const result = await genModel.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
     console.log("Successfully generated response");
+    console.log(`Response preview: ${text.substring(0, 50)}...`);
 
     return new Response(
       JSON.stringify({ text }),
@@ -52,7 +57,7 @@ serve(async (req) => {
     console.error("Error generating response:", error);
     
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || "Unknown error occurred" }),
       { 
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
