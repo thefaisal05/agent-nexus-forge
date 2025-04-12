@@ -118,7 +118,17 @@ const ChatPage = () => {
             .order("created_at", { ascending: true });
 
           if (messagesError) throw messagesError;
-          setMessages(messagesData || []);
+          
+          // Ensure we're only setting properly typed messages
+          if (messagesData) {
+            const typedMessages: Message[] = messagesData.map(msg => ({
+              id: msg.id,
+              content: msg.content,
+              sender_type: msg.sender_type as "user" | "agent",
+              created_at: msg.created_at
+            }));
+            setMessages(typedMessages);
+          }
         }
       } catch (error: any) {
         toast.error(error.message || "Failed to load chat");
@@ -152,8 +162,15 @@ const ChatPage = () => {
           filter: `conversation_id=eq.${conversation.id}`
         },
         (payload) => {
-          const newMessage = payload.new as Message;
-          setMessages(prevMessages => [...prevMessages, newMessage]);
+          const newMessage = payload.new as any;
+          // Ensure proper typing of the new message
+          const typedMessage: Message = {
+            id: newMessage.id,
+            content: newMessage.content,
+            sender_type: newMessage.sender_type as "user" | "agent",
+            created_at: newMessage.created_at
+          };
+          setMessages(prevMessages => [...prevMessages, typedMessage]);
         }
       )
       .subscribe();
@@ -237,7 +254,18 @@ const ChatPage = () => {
   // Helper function to get API key (in a real app, you'd fetch this securely from your backend)
   const getAPIKey = async (): Promise<string> => {
     // This is a placeholder. In a real app, you should fetch the API key securely
-    return process.env.GOOGLE_AI_API_KEY || "your-api-key";
+    try {
+      const { data: secretData, error } = await supabase
+        .functions.invoke('get-api-key', {
+          body: { key: 'GOOGLE_AI_API_KEY' }
+        });
+      
+      if (error) throw new Error('Failed to retrieve API key');
+      return secretData?.apiKey || "";
+    } catch (e) {
+      console.error("Error getting API key:", e);
+      return "";
+    }
   };
 
   if (isLoading) {
@@ -296,6 +324,7 @@ const ChatPage = () => {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your message..."
               disabled={isProcessing}
+              className="flex-1"
             />
             <Button type="submit" disabled={!input.trim() || isProcessing}>
               {isProcessing ? (
