@@ -1,7 +1,7 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,11 +21,15 @@ serve(async (req) => {
       throw new Error("API_KEY environment variable is not set");
     }
 
+    console.log("API Key is available, processing request");
+    
     const { prompt, model = "gemini-pro" } = await req.json();
     
     if (!prompt) {
       throw new Error("Prompt is required");
     }
+
+    console.log(`Using model: ${model}`);
 
     // Initialize Google AI
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -35,6 +39,8 @@ serve(async (req) => {
     const result = await genModel.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
+
+    console.log("Successfully generated response");
 
     return new Response(
       JSON.stringify({ text }),

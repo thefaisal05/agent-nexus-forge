@@ -2,10 +2,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize the Google AI client
-// Note: You'll need to set your API key in the Supabase dashboard under "Secrets"
 let googleAI: GoogleGenerativeAI | null = null;
 
 export function initGoogleAI(apiKey: string) {
+  if (!apiKey) {
+    throw new Error("API key is required");
+  }
   googleAI = new GoogleGenerativeAI(apiKey);
   return googleAI;
 }
@@ -18,13 +20,10 @@ export function getGoogleAI() {
 }
 
 export async function generateText(prompt: string, apiKey: string) {
-  // Initialize if not already done
-  if (!googleAI) {
-    initGoogleAI(apiKey);
-  }
-  
   try {
-    const model = getGoogleAI().getGenerativeModel({ model: "gemini-pro" });
+    // Always initialize with the provided API key to ensure fresh instance
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     return response.text();

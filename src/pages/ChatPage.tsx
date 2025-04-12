@@ -200,11 +200,10 @@ const ChatPage = () => {
       // Optimistically add user message to UI immediately
       const optimisticUserMessage: Message = {
         id: `temp-${Date.now()}`,
-        conversation_id: conversation.id,
-        sender_type: "user",
         content: userMessageContent,
+        sender_type: "user",
         created_at: new Date().toISOString()
-      } as Message;
+      };
       
       setMessages(prevMessages => [...prevMessages, optimisticUserMessage]);
 
@@ -228,7 +227,7 @@ const ChatPage = () => {
             {
               id: userMessage.id,
               content: userMessage.content,
-              sender_type: userMessage.sender_type,
+              sender_type: userMessage.sender_type as "user" | "agent",
               created_at: userMessage.created_at
             } : msg
         )
@@ -240,7 +239,7 @@ const ChatPage = () => {
         sender_type: "agent",
         content: "...",
         created_at: new Date().toISOString()
-      } as Message;
+      };
       
       setMessages(prevMessages => [...prevMessages, typingMessage]);
 
@@ -270,8 +269,28 @@ const ChatPage = () => {
           // Get the API key securely
           const apiKey = await getAPIKey();
           
-          const fullPrompt = `${systemPrompt}\n\nConversation history:\n${recentMessages}\n\nUser: ${userMessageContent}\n\nAssistant:`;
-          response = await generateText(fullPrompt, apiKey);
+          if (!apiKey) {
+            throw new Error("API key not found");
+          }
+          
+          console.log("Calling generate-response with prompt");
+          
+          // Use the Supabase function to generate a response
+          const { data, error } = await supabase.functions.invoke("generate-response", {
+            body: { 
+              prompt: `${systemPrompt}\n\nConversation history:\n${recentMessages}\n\nUser: ${userMessageContent}\n\nAssistant:`,
+              model: "gemini-pro"
+            }
+          });
+          
+          if (error) throw error;
+          
+          if (data && data.text) {
+            response = data.text;
+          } else {
+            throw new Error("No response from AI service");
+          }
+          
         } catch (error: any) {
           console.error("Error generating AI response:", error);
           response = "I encountered an error while processing your request. Please try again later.";
@@ -297,9 +316,8 @@ const ChatPage = () => {
     }
   };
 
-  // Helper function to get API key (in a real app, you'd fetch this securely from your backend)
+  // Helper function to get API key
   const getAPIKey = async (): Promise<string> => {
-    // This is a placeholder. In a real app, you should fetch the API key securely
     try {
       const { data: secretData, error } = await supabase
         .functions.invoke('get-api-key', {
