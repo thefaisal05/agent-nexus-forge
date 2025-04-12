@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,12 +21,17 @@ type Agent = {
   user_id: string;
 };
 
+type BlockPosition = {
+  x: number;
+  y: number;
+};
+
 type Block = {
   id: string;
   agent_id: string;
   type: string;
   config: any;
-  position: { x: number; y: number };
+  position: BlockPosition;
 };
 
 const blockTypes = [
@@ -58,7 +62,6 @@ const AgentEditor = () => {
       if (!id || !user) return;
 
       try {
-        // Fetch agent details
         const { data: agentData, error: agentError } = await supabase
           .from("agents")
           .select("*")
@@ -72,7 +75,6 @@ const AgentEditor = () => {
           return;
         }
 
-        // Check if user owns the agent
         if (agentData.user_id !== user.id) {
           toast.error("You don't have permission to edit this agent");
           navigate("/dashboard");
@@ -86,14 +88,21 @@ const AgentEditor = () => {
           is_public: agentData.is_public,
         });
 
-        // Fetch agent blocks
         const { data: blocksData, error: blocksError } = await supabase
           .from("blocks")
           .select("*")
           .eq("agent_id", id);
 
         if (blocksError) throw blocksError;
-        setBlocks(blocksData || []);
+        
+        if (blocksData) {
+          const formattedBlocks = blocksData.map(block => ({
+            ...block,
+            position: typeof block.position === 'object' ? block.position as BlockPosition : 
+                     { x: 0, y: 0 }
+          }));
+          setBlocks(formattedBlocks);
+        }
       } catch (error: any) {
         toast.error(error.message || "Failed to load agent");
       } finally {
@@ -121,7 +130,6 @@ const AgentEditor = () => {
       if (error) throw error;
       toast.success("Agent updated successfully");
       
-      // Update local state
       setAgent({
         ...agent,
         name: formData.name,
@@ -139,7 +147,6 @@ const AgentEditor = () => {
     if (!id || !agent) return;
 
     try {
-      // Default configurations based on block type
       let config = {};
       
       if (type === "prompt") {
@@ -150,21 +157,30 @@ const AgentEditor = () => {
         config = { model: "gemini-pro" };
       }
 
+      const position: BlockPosition = { 
+        x: blocks.length * 100, 
+        y: blocks.length * 50 
+      };
+
       const { data, error } = await supabase
         .from("blocks")
         .insert({
           agent_id: id,
           type,
           config,
-          position: { x: blocks.length * 100, y: blocks.length * 50 },
+          position,
         })
         .select()
         .single();
 
       if (error) throw error;
       
-      // Update local state
-      setBlocks([...blocks, data]);
+      const newBlock: Block = {
+        ...data,
+        position: typeof data.position === 'object' ? data.position as BlockPosition : position
+      };
+      
+      setBlocks([...blocks, newBlock]);
       toast.success(`Added ${type} block`);
     } catch (error: any) {
       toast.error(error.message || "Failed to add block");
@@ -180,7 +196,6 @@ const AgentEditor = () => {
 
       if (error) throw error;
       
-      // Update local state
       setBlocks(blocks.map(block => 
         block.id === blockId ? { ...block, config } : block
       ));
@@ -199,7 +214,6 @@ const AgentEditor = () => {
 
       if (error) throw error;
       
-      // Update local state
       setBlocks(blocks.filter(block => block.id !== blockId));
       toast.success("Block removed");
     } catch (error: any) {
@@ -237,7 +251,6 @@ const AgentEditor = () => {
         </div>
       </div>
       
-      {/* Agent details */}
       <Card>
         <CardHeader>
           <CardTitle>Agent Details</CardTitle>
@@ -298,7 +311,6 @@ const AgentEditor = () => {
         </CardContent>
       </Card>
       
-      {/* Agent blocks */}
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">Agent Blocks</h2>
@@ -350,7 +362,6 @@ const AgentEditor = () => {
   );
 };
 
-// Block Card Component
 interface BlockCardProps {
   block: Block;
   updateConfig: (config: any) => void;
@@ -363,63 +374,63 @@ const BlockCard = ({ block, updateConfig, removeBlock }: BlockCardProps) => {
   const handleSave = () => {
     updateConfig(config);
   };
+
+  const blockForm = useForm({
+    defaultValues: {
+      config: block.config
+    }
+  });
   
   const renderBlockContent = () => {
     switch (block.type) {
       case "prompt":
         return (
           <div>
-            <FormItem>
-              <FormLabel>System Prompt</FormLabel>
-              <FormControl>
-                <Textarea 
-                  value={config.prompt} 
-                  onChange={(e) => setConfig({...config, prompt: e.target.value})}
-                  placeholder="You are a helpful assistant..."
-                  rows={4}
-                  className="mt-1"
-                />
-              </FormControl>
-            </FormItem>
-            <Button className="mt-4" onClick={handleSave}>Save Changes</Button>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+              <Textarea 
+                value={config.prompt} 
+                onChange={(e) => setConfig({...config, prompt: e.target.value})}
+                placeholder="You are a helpful assistant..."
+                rows={4}
+                className="w-full"
+              />
+            </div>
+            <Button onClick={handleSave}>Save Changes</Button>
           </div>
         );
         
       case "memory":
         return (
           <div>
-            <FormItem>
-              <FormLabel>Maximum Messages to Remember</FormLabel>
-              <FormControl>
-                <Input 
-                  type="number"
-                  value={config.maxMessages} 
-                  onChange={(e) => setConfig({...config, maxMessages: parseInt(e.target.value)})}
-                  min={1}
-                  className="mt-1"
-                />
-              </FormControl>
-            </FormItem>
-            <Button className="mt-4" onClick={handleSave}>Save Changes</Button>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Messages to Remember</label>
+              <Input 
+                type="number"
+                value={config.maxMessages} 
+                onChange={(e) => setConfig({...config, maxMessages: parseInt(e.target.value)})}
+                min={1}
+                className="w-full"
+              />
+            </div>
+            <Button onClick={handleSave}>Save Changes</Button>
           </div>
         );
         
       case "googleai":
         return (
           <div>
-            <FormItem>
-              <FormLabel>Model</FormLabel>
-              <FormControl>
-                <select
-                  value={config.model}
-                  onChange={(e) => setConfig({...config, model: e.target.value})}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  <option value="gemini-pro">Gemini Pro</option>
-                  <option value="gemini-pro-vision">Gemini Pro Vision</option>
-                </select>
-              </FormControl>
-            </FormItem>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+              <select
+                value={config.model}
+                onChange={(e) => setConfig({...config, model: e.target.value})}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="gemini-pro">Gemini Pro</option>
+                <option value="gemini-pro-vision">Gemini Pro Vision</option>
+              </select>
+            </div>
             <Button className="mt-4" onClick={handleSave}>Save Changes</Button>
           </div>
         );
@@ -429,7 +440,6 @@ const BlockCard = ({ block, updateConfig, removeBlock }: BlockCardProps) => {
     }
   };
   
-  // Get a human-readable title based on block type
   const getBlockTitle = () => {
     switch (block.type) {
       case "prompt": return "System Prompt";
