@@ -1,1 +1,5 @@
+
 project_id = "jtoerzaawzyvjsfewjxk"
+
+[functions.generate-response]
+verify_jwt = true
